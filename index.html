@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Guild Dashboard</title>
+    <!-- SheetJS for Excel Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
@@ -27,6 +28,63 @@
             color: var(--accent-color);
             text-transform: uppercase;
             text-shadow: 0 0 8px rgba(0, 255, 102, 0.4);
+        }
+
+        /* Password Overlay */
+        #authOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .auth-card {
+            background-color: var(--panel-bg);
+            border: 2px solid var(--border-color);
+            padding: 40px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(0, 255, 102, 0.3);
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .auth-card h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+
+        .auth-card input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+            box-sizing: border-box;
+            outline: none;
+            box-shadow: inset 0 0 5px rgba(0, 255, 102, 0.2);
+        }
+
+        .auth-card button {
+            width: 100%;
+            padding: 12px;
+            font-size: 1.1em;
+        }
+
+        .error-msg {
+            color: #ff3333;
+            margin-top: 10px;
+            font-size: 0.9em;
+            display: none;
         }
 
         .controls {
@@ -73,6 +131,7 @@
             display: none;
         }
         
+        /* Tab Navigation Styles */
         .tabs-container {
             display: flex;
             gap: 10px;
@@ -193,39 +252,72 @@
         .role-officer { color: #33bbff; border-color: #33bbff; }
         .role-member { color: #00ff66; border-color: #00ff66; }
 
+        #mainContent {
+            display: none;
+        }
     </style>
 </head>
 <body>
 
-    <h1>Guild Data Extractor</h1>
-    
-    <div class="controls">
-        <div>
-            <label class="file-upload-label">
-                <input type="file" id="jsonFileInput" multiple accept=".json,.txt,.html">
-                Upload JSON File(s)
-            </label>
-        </div>
-        <div>
-            <button id="exportExcelBtn" style="display: none;">Export Multi-Sheet Excel</button>
+    <!-- Password Protection Overlay -->
+    <div id="authOverlay">
+        <div class="auth-card">
+            <h2>Enter Password</h2>
+            <input type="password" id="passwordInput" placeholder="Password...">
+            <button id="loginBtn">Access Dashboard</button>
+            <div id="errorMsg" class="error-msg">Incorrect password. Please try again.</div>
         </div>
     </div>
-    
-    <textarea id="jsonPasteInput" placeholder="Alternatively, paste your raw JSON here (you can paste multiple files at once) and press process..."></textarea>
-    <button id="processPasteBtn">Process Pasted JSON</button>
 
-    <div id="dashboard" style="display: none; margin-top: 30px;">
-        <div class="tabs-container" id="tabsContainer"></div>
-        <h2 id="viewTitleDisplay">Dashboard</h2>
-        <div class="summary-cards" id="summaryCards"></div>
-        <h3 id="tableTitle">Data</h3>
-        <table>
-            <thead id="tableHead"></thead>
-            <tbody id="tableBody"></tbody>
-        </table>
+    <!-- Main Dashboard Container -->
+    <div id="mainContent">
+        <h1>Guild Data Extractor</h1>
+        
+        <div class="controls">
+            <div>
+                <label class="file-upload-label">
+                    <input type="file" id="jsonFileInput" multiple accept=".json,.txt,.html">
+                    Upload JSON File(s)
+                </label>
+            </div>
+            <div>
+                <button id="exportExcelBtn" style="display: none;">Export Multi-Sheet Excel</button>
+            </div>
+        </div>
+        
+        <textarea id="jsonPasteInput" placeholder="Alternatively, paste your raw JSON here (you can paste multiple files at once) and press process..."></textarea>
+        <button id="processPasteBtn">Process Pasted JSON</button>
+
+        <div id="dashboard" style="display: none; margin-top: 30px;">
+            <div class="tabs-container" id="tabsContainer"></div>
+            <h2 id="viewTitleDisplay">Dashboard</h2>
+            <div class="summary-cards" id="summaryCards"></div>
+            <h3 id="tableTitle">Data</h3>
+            <table>
+                <thead id="tableHead"></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
     </div>
 
     <script>
+        // Password Protection Logic
+        document.getElementById('loginBtn').addEventListener('click', checkPassword);
+        document.getElementById('passwordInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') checkPassword();
+        });
+
+        function checkPassword() {
+            const pass = document.getElementById('passwordInput').value;
+            const errorMsg = document.getElementById('errorMsg');
+            if (pass === 'info') {
+                document.getElementById('authOverlay').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+            } else {
+                errorMsg.style.display = 'block';
+            }
+        }
+
         let parsedGuilds = [];
         let currentSortColumn = null;
         let currentSortDirection = 'asc';
@@ -237,7 +329,6 @@
         function extractAndParseJSON(rawText) {
             let text = rawText.trim();
             
-            // Handle HTML wrappers if present
             if (text.startsWith('<')) {
                 try {
                     const parser = new DOMParser();
@@ -249,15 +340,12 @@
                 }
             }
             
-            // Try direct parse
             try {
                 const parsed = JSON.parse(text);
                 return Array.isArray(parsed) ? parsed : [parsed];
             } catch(e) {}
 
-            // Fallback parsing for concatenated or loosely formatted JSON strings
             try {
-                // If it's missing outer array brackets but contains multiple objects
                 if (!text.startsWith('[') && text.includes('}{')) {
                     text = '[' + text.replace(/}\s*{/g, '},{') + ']';
                     const parsed = JSON.parse(text);
@@ -338,7 +426,7 @@
                         lastVisit: m.last_visit ? m.last_visit.split('.')[0].replace('T', ' ') : 'Unknown',
                         isLocked: isLocked
                     };
-                }).sort((a, b) => b.deployed - a.deployed); // Sort members by deployed descending
+                }).sort((a, b) => b.deployed - a.deployed);
 
                 const guildObj = {
                     guildInfo: {
